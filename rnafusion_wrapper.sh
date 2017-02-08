@@ -121,9 +121,7 @@ then
 	fi
 	
 	mkdir -p $wkdir/$id/logs
-	mv $pid.* rnafusion_wrapper.$pid.log $id/logk* $wkdir/$id/logs
-	mkdir -p $wkdir/manifests
-	mv gdc.manifest.$pid $wkdir/manifests
+	mv $pid.* rnafusion_wrapper.$pid.log *.$pid $id/log* $wkdir/$id/logs
 	echo "RNAFUSION PIPELINE END" >> $wkdir/$id/logs/rnafusion_wrapper.$pid.log
 
 else
