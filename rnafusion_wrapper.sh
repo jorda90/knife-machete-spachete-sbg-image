@@ -31,25 +31,33 @@ dataname=rnafusion_out
 runid=`echo $pid | cut -d. -f2`
 #overlap=8	#PE<70bp=8 (default); PE>70=13; SE<70=10; SE>70=15
 
+mdck=0
 
-echo "RNAFUSION PIPELINE INITIATED" > rnafusion_wrapper.$pid.log
+echo "RNAFUSION PIPELINE INITIATED ON SAMPLE $id" > rnafusion_wrapper.$pid.log
 if [ ! -f "$wkdir/$id/NO.error.`echo $dataname$runid`.is.error.in.subprocess.txt" ]
 then
 	#Recreate the manifest required by gdc-client to pull sequence from GDC Data Portal#
-	echo "ACQUIRE SEQUENCE BAM FILE" >> rnafusion_wrapper.$pid.log
-	if [[ ! -f "$id/$filename" && ! -f "$id/"$id"_1.fq.gz" ]]
+	echo "ACQUIRE BAM FILE" >> rnafusion_wrapper.$pid.log
+	if [[ ! -f "$id/$filename" && ! -f "$id/"$id"_1.f*q.gz" ]]
 	then
 		printf "%s\t%s\t%s\t%s\t%s\n" "id" "filename" "md5" "size" "state" "$id" "$filename" "$md5" "$size" "$state" > gdc.manifest.$pid
 
 		echo "	Downloading bam file [ID: $id] from GDC Data Portal: $(date) " >> rnafusion_wrapper.$pid.log
 		/opt/installed/gdc-client/bin/gdc-client download -m $wkdir/gdc.manifest.$pid -t $token
 		echo "	Download complete: $(date)" >> rnafusion_wrapper.$pid.log
+                echo "Verifying MD5 sum" >> rnafusion_wrapper.$pid.log
+                mdck=`md5sum $id/$filename | cut -d' ' -f1`
 	else
-		echo "	BAM already exists" >> rnafusion_wrapper.$pid.log
+		echo "	Sequence already available" >> rnafusion_wrapper.$pid.log
+                echo "Verifying MD5 sum" >> rnafusion_wrapper.$pid.log
+                mdck=`md5sum $id/$filename | cut -d' ' -f1`
 	fi
 
-	echo "Verifying MD5 sum" >> rnafusion_wrapper.$pid.log
-	mdck=`md5sum $id/$filename | cut -d' ' -f1`
+	if [ $mdck == 0 ]
+	then
+		mdck=$md5
+	fi
+
 	if [ $mdck == $md5 ]
 	then
 		targets=(callknife.py HG19exons index toyIndelIndices)
@@ -58,21 +66,27 @@ then
 		cd ..
 	
 		#Convert to FASTQ
-		echo "CONVERT BAM TO FASTQ" >> rnafusion_wrapper.$pid.log
-		if [ ! -f "$wkdir/$id/"$id"_1.fq.gz" ]
+		echo "PREPARE FASTQ" >> rnafusion_wrapper.$pid.log
+		if [[ ! -f "$wkdir/$id/"$id"_1.f*q.gz" && ! -f "$id/"$id"_1_val_1_fastqc.zip" ]]
 		then
 			echo "	Converting $filename to FASTQ: $(date)" >> rnafusion_wrapper.$pid.log
 			java -Xmx30g -jar /home/exacloud/lustre1/users/chiotti/tools/picard-tools-1.139/picard.jar SamToFastq VALIDATION_STRINGENCY=SILENT INPUT=$id/$filename FASTQ=$id/"$id"_1.fq SECOND_END_FASTQ=$id/"$id"_2.fq    #All tool paths will be changed to a single location for Docker
 			if [ $? == 0 ]
 			then
+				gzip $id/"$id"*.fq
 				echo "	BAM to FASTQ conversion complete: $(date)" >> rnafusion_wrapper.$pid.log
 			else
 				echo "	BAM to FASTQ conversion FAILED: $(date)" >> rnafusion_wrapper.$pid.log
 			fi
-	
+		else
+			echo "	Untrimmed FASTQ already available" >> rnafusion_wrapper.$pid.log
+		fi
+
+		if [[ -f "$wkdir/$id/"$id"_1.f*q.gz" && ! -f "$id/"$id"_1_val_1_fastqc.zip" ]]
+		then
 			#Run trim_galore. For now arguments are hard-coded
 			echo "	Trimming adapter sequences: $(date)" >> rnafusion_wrapper.$pid.log
-			/home/exacloud/lustre1/users/chiotti/tools/trim_galore/trim_galore --suppress_warn --gzip --fastqc --paired $id/"$id"_1.fq $id/"$id"_2.fq --quality $quality --stringency $stringency -e $error --length $minimum -o $id
+			/home/exacloud/lustre1/users/chiotti/tools/trim_galore/trim_galore --suppress_warn --fastqc --paired $id/"$id"_1.fq.gz $id/"$id"_2.fq.gz --quality $quality --stringency $stringency -e $error --length $minimum -o $id
 			if [ $? == 0 ]
 			then
 				mv $id/"$id"_1_val_1.fq.gz $id/"$id"_1.fq.gz 
@@ -139,3 +153,4 @@ else
         echo "  EXITING: KNIFE_MACHETE output is already available for $id/$filename" >> $wkdir/$id/logs/rnafusion_wrapper.$pid.log
 
 fi
+
