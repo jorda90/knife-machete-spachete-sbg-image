@@ -116,12 +116,21 @@ then
 	else
 		echo "	Sequence download error. MD5 sums do not match. Run aborted: $(date) " >> rnafusion_wrapper.$pid.log
 		echo "	Cleaning up workspace" >> rnafusion_wrapper.$pid.log
-		rm -rf $wkdir/*mani*$pid $wkdir/$id
+		rm -rf $wkdir/$id
+		if [ -f *mani*$pid ]
+		then
+			rm -f *mani*$pid
+		fi
+
 		echo "	Workspace clean. Exiting: $(date) " >> rnafusion_wrapper.$pid.log
 	fi
 	
 	mkdir -p $wkdir/$id/logs
-	mv $pid.* rnafusion_wrapper.$pid.log *mani* $pid $id/log* $wkdir/$id/logs
+	mv $pid.* rnafusion_wrapper.$pid.log $id/log* $wkdir/$id/logs
+	if [ -f *mani*$pid ]
+	then
+		mv *mani*$pid $wkdir/$id/logs
+	fi
 	echo "RNAFUSION PIPELINE END" >> $wkdir/$id/logs/rnafusion_wrapper.$pid.log
 
 else
